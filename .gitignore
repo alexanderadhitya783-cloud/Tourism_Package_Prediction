@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+mlruns/
+mlartifacts/
+Xtrain.csv
+Xtest.csv
+ytrain.csv
+ytest.csv
+tuning_results.csv
+mlflow*.db
+mlartifacts-final/
