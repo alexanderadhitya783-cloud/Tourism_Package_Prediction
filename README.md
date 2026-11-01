@@ -31,7 +31,9 @@ For local MLflow UI tracking, start MLflow separately and set `MLFLOW_TRACKING_U
 
 ## Workflow and deployment status
 
-The GitHub Actions workflow validates the dataset, creates stratified splits, and trains/evaluates the profile-only model. Check the Actions tab for the latest run. The Streamlit application is repository code; it is not a Streamlit Community Cloud deployment unless a separate app URL is provided.
+The final profile-only pipeline completed successfully in GitHub Actions: [run 41268744961](https://github.com/alexanderadhitya783-cloud/Tourism_Package_Prediction/actions/runs/41268744961). All three jobs passed, including training and committing the refreshed model artifact. The GitHub-run metrics match the verified local results: 5-fold CV F1 0.7226; holdout accuracy 0.9066, precision 0.8077, recall 0.6774, F1 0.7368, ROC-AUC 0.9180, and log-loss 0.2586.
+
+The Streamlit application is repository code only; it is **not** deployed to Streamlit Community Cloud and there is no live app URL yet.
 
 ## Data and safety notice
 
