@@ -5,31 +5,55 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: tourism-pipeline-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   register-dataset:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r tourism_project/requirements.txt
-      - run: python tourism_project/model_building/data_register.py
-      - uses: actions/upload-artifact@v4
+          cache: pip
+          cache-dependency-path: tourism_project/requirements.txt
+      - name: Install dependencies
+        run: pip install -r tourism_project/requirements.txt
+      - name: Validate dataset
+        run: python tourism_project/model_building/data_register.py
+      - name: Upload registered dataset
+        uses: actions/upload-artifact@v4
         with:
           name: registered-data
           path: tourism_project/data/tourism.csv
+          if-no-files-found: error
+
   data-prep:
     needs: register-dataset
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r tourism_project/requirements.txt
-      - run: python tourism_project/model_building/prep.py
-      - uses: actions/upload-artifact@v4
+          cache: pip
+          cache-dependency-path: tourism_project/requirements.txt
+      - name: Install dependencies
+        run: pip install -r tourism_project/requirements.txt
+      - name: Download registered dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: registered-data
+          path: tourism_project/data
+      - name: Prepare data
+        run: python tourism_project/model_building/prep.py
+      - name: Upload train/test splits
+        uses: actions/upload-artifact@v4
         with:
           name: data-splits
           path: |
@@ -37,46 +61,64 @@ jobs:
             Xtest.csv
             ytrain.csv
             ytest.csv
+          if-no-files-found: error
+
   model-training:
     needs: data-prep
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r tourism_project/requirements.txt
-      - uses: actions/download-artifact@v4
+          cache: pip
+          cache-dependency-path: tourism_project/requirements.txt
+      - name: Install dependencies
+        run: pip install -r tourism_project/requirements.txt
+      - name: Download train/test splits
+        uses: actions/download-artifact@v4
         with:
           name: data-splits
-      - name: Start MLflow server
+      - name: Start local MLflow server
         run: |
-          nohup mlflow ui --host 127.0.0.1 --port 5000 > mlflow_server.log 2>&1 &
+          nohup mlflow ui --host 127.0.0.1 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlartifacts > mlflow_server.log 2>&1 &
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:5000/health > /dev/null; then exit 0; fi
+            if curl -sf http://127.0.0.1:5000/health > /dev/null; then
+              echo "MLflow server is ready"
+              exit 0
+            fi
             sleep 2
           done
+          echo "MLflow server did not start"
           cat mlflow_server.log
           exit 1
-      - name: Train and evaluate model
+      - name: Train and evaluate
+        env:
+          MLFLOW_TRACKING_URI: http://127.0.0.1:5000
         run: python tourism_project/model_building/train.py
-      - name: Upload MLflow results
+      - name: Upload MLflow tracking and tuning results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mlflow-tracking
           path: |
-            mlruns
+            mlflow.db
             mlartifacts
             tuning_results.csv
+            mlflow_server.log
           if-no-files-found: ignore
       - name: Commit trained model
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tourism_project/deployment/*.joblib
-          git commit -m "Add trained tourism model [skip ci]" || echo "No model change to commit"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git add tourism_project/deployment/best_tourism_package_model_v1.joblib
+          if git diff --cached --quiet; then
+            echo "No model changes to commit"
+          else
+            git commit -m "Add trained model [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi

@@ -31,6 +31,8 @@ if missing:
 
 if df.empty:
     raise ValueError("Dataset is empty.")
+if df[TARGET].isna().any():
+    raise ValueError(f"Target column '{TARGET}' contains missing values.")
 
 if not set(df[TARGET].dropna().unique()).issubset({0, 1}):
     raise ValueError(f"Target column '{TARGET}' must contain only 0/1 values.")
