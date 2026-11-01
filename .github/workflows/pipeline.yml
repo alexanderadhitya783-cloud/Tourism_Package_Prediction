@@ -85,7 +85,7 @@ jobs:
           name: data-splits
       - name: Start local MLflow server
         run: |
-          nohup mlflow ui --host 127.0.0.1 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlartifacts > mlflow_server.log 2>&1 &
+          nohup mlflow ui --host 127.0.0.1 --port 5000 --backend-store-uri file:./mlruns --default-artifact-root ./mlartifacts > mlflow_server.log 2>&1 &
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:5000/health > /dev/null; then
               echo "MLflow server is ready"
@@ -106,11 +106,11 @@ jobs:
         with:
           name: mlflow-tracking
           path: |
-            mlflow.db
+            mlruns
             mlartifacts
             tuning_results.csv
             mlflow_server.log
-          if-no-files-found: ignore
+            if-no-files-found: ignore
       - name: Commit trained model
         run: |
           git config user.name "github-actions[bot]"
